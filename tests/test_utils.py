@@ -14,7 +14,9 @@ except ImportError:
 from pathlib import Path
 from pynets.core import utils
 import nibabel as nib
-import indexed_gzip
+import sys
+if sys.platform.startswith('win') is False:
+    import indexed_gzip
 import pytest
 import logging
 
@@ -22,9 +24,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(50)
 
 
-def test_save_coords_and_labels_to_pickle():
+def test_save_coords_and_labels_to_json():
     """
-    Test save_RSN_coords_and_labels_to_pickle functionality
+    Test save_RSN_coords_and_labels_to_json functionality
     """
     import tempfile
 
@@ -37,12 +39,14 @@ def test_save_coords_and_labels_to_pickle():
     labels_file_path = f"{base_dir}/miscellaneous/Default_func_labelnames_wb.pkl"
     labels_file = open(labels_file_path, 'rb')
     labels = pickle.load(labels_file)
-    network = None
+    network = 'Default'
+    indices = np.arange(len(coords) + 1)[np.arange(len(coords) + 1) != 0].tolist()
 
-    [coord_path, labels_path] = utils.save_coords_and_labels_to_pickle(coords, labels, dir_path, network)
+    nodes_path = utils.save_coords_and_labels_to_json(coords, labels,
+                                                      dir_path, network,
+                                                      indices)
 
-    assert os.path.isfile(coord_path) is True
-    assert os.path.isfile(labels_path) is True
+    assert os.path.isfile(nodes_path) is True
 
 
 def test_save_nifti_parcels_map():
@@ -60,7 +64,10 @@ def test_save_nifti_parcels_map():
     affine = np.diag([1, 2, 3, 1])
     net_parcels_map_nifti = nib.Nifti1Image(array_data, affine)
 
-    net_parcels_nii_path = utils.save_nifti_parcels_map(ID, dir_path, network, net_parcels_map_nifti, vox_size)
+    net_parcels_nii_path = utils.save_nifti_parcels_map(ID, dir_path,
+                                                        network,
+                                                        net_parcels_map_nifti,
+                                                        vox_size)
     assert os.path.isfile(net_parcels_nii_path) is True
 
 
@@ -82,8 +89,9 @@ def test_save_ts_to_file():
     ID = '002'
     ts_within_nodes = f"{base_dir}/miscellaneous/002_Default_rsn_net_ts.npy"
 
-    out_path_ts = utils.save_ts_to_file(roi, network, ID, dir_path, ts_within_nodes, smooth, hpass, node_size,
-                                        extract_strategy)
+    out_path_ts = utils.save_ts_to_file(roi, network, ID, dir_path,
+                                        ts_within_nodes, smooth, hpass,
+                                        node_size, extract_strategy)
     assert os.path.isfile(out_path_ts) is True
 
 
@@ -102,7 +110,9 @@ def test_check_est_path_existence():
     assert est_path_list_ex is not None
 
 
-def test_collect_pandas_df():
+@pytest.mark.parametrize("embed", [False, True])
+@pytest.mark.parametrize("plot_switch", [False, True])
+def test_collect_pandas_df(plot_switch, embed):
     """
     Test collect_pandas_df_make functionality
     """
@@ -112,10 +122,13 @@ def test_collect_pandas_df():
     multimodal = False
     network = None
     ID = '002'
-    plot_switch = False
-    net_mets_csv_list = [i for i in glob.glob(f"{base_dir}/topology/*.csv") if '_neat.csv' not in i]
-    out = utils.collect_pandas_df(network, ID, net_mets_csv_list, plot_switch, multi_nets, multimodal)
+    net_mets_csv_list = [i for i in glob.glob(f"{base_dir}/topology/*.csv")
+                         if '_neat.csv' not in i]
+    out = utils.collect_pandas_df(network, ID, net_mets_csv_list,
+                                  plot_switch, multi_nets, multimodal, embed)
     assert out is True
+    assert isinstance(net_mets_csv_list, list)
+    assert len(net_mets_csv_list) == 9
 
 
 @pytest.mark.parametrize("node_size", [6, None])
@@ -140,7 +153,8 @@ def test_create_est_path_func(node_size, hpass, smooth, parc):
 
     est_path = utils.create_est_path_func(ID, network, conn_model, thr, roi,
                                           dir_path, node_size, smooth,
-                                          thr_type, hpass, parc, extract_strategy)
+                                          thr_type, hpass, parc,
+                                          extract_strategy)
     assert est_path is not None
 
 
@@ -197,7 +211,8 @@ def test_create_csv_path():
 
     est_path = utils.create_est_path_func(ID, network, conn_model, thr, roi,
                                           dir_path, node_size, smooth,
-                                          thr_type, hpass, parc, extract_strategy)
+                                          thr_type, hpass, parc,
+                                          extract_strategy)
     out_path = utils.create_csv_path(dir_path, est_path)
     assert out_path is not None
 
@@ -264,7 +279,8 @@ def test_create_unthr_path(node_size, hpass, smooth, parc):
 
 
 @pytest.mark.parametrize("atlas", ['Power', 'Shirer', 'Shen', 'Smith',
-                                    pytest.param(None, marks=pytest.mark.xfail(raises=ValueError))])
+                                    pytest.param(None,
+                                                 marks=pytest.mark.xfail(raises=ValueError))])
 @pytest.mark.parametrize("input", ['fmri', 'dmri'])
 def test_do_dir_path(atlas, input):
     """
@@ -434,9 +450,9 @@ def test_timeout(s):
 
 
 @pytest.mark.parametrize("modality", ['func', 'dwi'])
-def test_build_hp_dict(modality):
+def test_build_mp_dict(modality):
     import tempfile
-    from pynets.stats.benchmarking import build_hp_dict
+    from pynets.stats.utils import build_mp_dict
     dir_path = str(tempfile.TemporaryDirectory().name)
     os.makedirs(dir_path)
     base_dir = str(Path(__file__).parent / "examples")
@@ -445,24 +461,24 @@ def test_build_hp_dict(modality):
         file_renamed = f"{base_dir}/miscellaneous/graphs/graph_sub-002_modality-func_rsn-Default_model-cov_template-MNI152_T1_nodetype-spheres-2mm_smooth-2fwhm_hpass-0.1Hz_template-MNI152_T1_thrtype-PROP_thr-0.95.npy"
     elif modality == 'dwi':
         file_renamed = f"{base_dir}/miscellaneous/graphs/0025427_modality-dwi_model-csd_nodetype-parc_samples-10000streams_tt-particle_dg-prob_ml-10_template-MNI152_T1_thrtype-PROP_thr-1.0.npy"
-    gen_hyperparams = ['modality', 'model', 'nodetype', 'template']
+    gen_metaparams = ['modality', 'model', 'nodetype', 'template']
 
-    hyperparam_dict = {}
+    metaparam_dict = {}
     file_renamed = file_renamed.split('graphs/')[1]
-    hyperparam_dict, hyperparams = build_hp_dict(file_renamed,
+    metaparam_dict, metaparams = build_mp_dict(file_renamed,
                                                  modality,
-                                                 hyperparam_dict,
-                                                 gen_hyperparams)
+                                                 metaparam_dict,
+                                                 gen_metaparams)
 
     # test_build_sql_db
     if modality == 'func':
         import pandas as pd
         ID = '002'
-        hyperparams.append('atlas')
-        hyperparams.append('AUC')
+        metaparams.append('atlas')
+        metaparams.append('AUC')
         df_summary_auc = {'AUC': 0.8}
         db = utils.build_sql_db(dir_path, ID)
         db.create_modality_table('func')
-        db.add_hp_columns(hyperparams)
+        db.add_hp_columns(metaparams)
         db.add_row_from_df(pd.DataFrame([{'AUC': 0.8}], index=[0]),
-                           hyperparam_dict)
+                           metaparam_dict)

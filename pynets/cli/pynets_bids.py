@@ -196,7 +196,7 @@ def sweep_directory(
 
                 conf = layout.get(
                     **merge_dicts(mod_query, {"extension":
-                                                  [".tsv", ".tsv.gz"]})
+                                              [".tsv", ".tsv.gz"]})
                 )
                 conf = [i for i in conf if "confounds_regressors" in
                         i.filename]
@@ -455,7 +455,7 @@ def main():
     if len(sys.argv) < 1:
         print("\nMissing command-line inputs! See help options with the -h"
               " flag.\n")
-        sys.exit()
+        sys.exit(1)
 
     print(f"{Fore.LIGHTBLUE_EX}\nBIDS API\n")
 

@@ -2,9 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Wed Dec 27 16:19:14 2017
-
 @authors: Derek Pisner & Ryan Hammonds
-
 """
 import pytest
 import numpy as np
@@ -30,7 +28,8 @@ def test_average_shortest_path_length_for_all():
     avgest_path_len = netstats.average_shortest_path_length_for_all(G)
     print("%s%s%s" % ('thresh_and_fit (Functional, proportional thresholding) --> finished: ',
                       np.round(time.time() - start_time, 1), 's'))
-    assert avgest_path_len is not None
+    assert avgest_path_len > 0
+    assert type(avgest_path_len) == float
 
 
 def test_average_local_efficiency():
@@ -42,10 +41,11 @@ def test_average_local_efficiency():
     G = nx.from_numpy_array(in_mat)
 
     start_time = time.time()
-    average_local_efficiency = netstats.average_local_efficiency(G)
+    average_local_efficiency = netstats.average_local_efficiency(G, engine='nx')
     print("%s%s%s" % ('thresh_and_fit (Functional, proportional thresholding) --> finished: ',
                       np.round(time.time() - start_time, 1), 's'))
-    assert average_local_efficiency is not None
+    assert average_local_efficiency > 0
+    assert average_local_efficiency.dtype == float
 
 
 # used random node_comm_aff_mat
@@ -61,10 +61,10 @@ def test_create_communities():
     com_assign = netstats.create_communities(node_comm_aff_mat, node_num)
     print("%s%s%s" % ('thresh_and_fit (Functional, proportional thresholding) --> finished: ',
                       np.round(time.time() - start_time, 1), 's'))
-    assert com_assign is not None
+    assert len(com_assign) > 0
 
-
-def test_participation_coef():
+@pytest.mark.parametrize("degree", ['in', 'out'])
+def test_participation_coef(degree):
     """
     Test for participation_coef functionality
     """
@@ -78,7 +78,7 @@ def test_participation_coef():
     P = netstats.participation_coef(W, ci, degree='undirected')
     print("%s%s%s" % ('thresh_and_fit (Functional, proportional thresholding) --> finished: ',
                       str(np.round(time.time() - start_time, 1)), 's'))
-    assert P is not None
+    assert P.size > 0
 
 
 def test_modularity():
@@ -90,12 +90,12 @@ def test_modularity():
     in_mat = np.load(f"{base_dir}/miscellaneous/graphs/002_modality-func_rsn-Default_model-cov_nodetype-spheres-2mm_smooth-2fwhm_hpass-0.1Hz_thrtype-PROP_thr-0.95.npy")
     G = nx.from_numpy_matrix(in_mat)
     start_time = time.time()
-    ci = community.best_partition(G)
-    mod = community.community_louvain.modularity(ci, G)
+    ci_dict = community.best_partition(G)
+    mod = community.community_louvain.modularity(ci_dict, G)
     print("%s%s%s" % ('thresh_and_fit (Functional, proportional thresholding) --> finished: ',
                       str(np.round(time.time() - start_time, 1)), 's'))
-    assert ci is not None
-    assert mod is not None
+    assert type(ci_dict) == dict
+    assert type(mod) == float
 
 
 def test_diversity_coef_sign():
@@ -112,15 +112,15 @@ def test_diversity_coef_sign():
     [Hpos, Hneg] = netstats.diversity_coef_sign(W, ci)
     print("%s%s%s" % ('thresh_and_fit (Functional, proportional thresholding) --> finished: ',
                       str(np.round(time.time() - start_time, 1)), 's'))
-    assert Hpos is not None
-    assert Hneg is not None
+    assert Hpos.size > 0
+    assert Hneg.size > 0
 
 
 @pytest.mark.parametrize("clustering",
     [
         'single',
-        'complete',
-        pytest.param(None, marks=pytest.mark.xfail(raises=UnboundLocalError))
+        pytest.param('complete', marks=pytest.mark.xfail(raises=ValueError)),
+        pytest.param(None, marks=pytest.mark.xfail(raises=ValueError))
     ]
 )
 def test_link_communities(clustering):
@@ -128,33 +128,42 @@ def test_link_communities(clustering):
     Test for link_communities functionality
     """
     base_dir = str(Path(__file__).parent/"examples")
-    in_mat = np.load(f"{base_dir}/miscellaneous/graphs/002_modality-func_rsn-Default_model-cov_nodetype-spheres-2mm_smooth-2fwhm_hpass-0.1Hz_thrtype-PROP_thr-0.95.npy")
-
+    in_mat = np.load(f"{base_dir}/miscellaneous/sub-0021001_rsn-Default_nodetype-parc_model-sps_template-MNI152_T1_thrtype-DENS_thr-0.19.npy")
     start_time = time.time()
     M = netstats.link_communities(in_mat, type_clustering=clustering)
-    print("%s%s%s" % ('thresh_and_fit (Functional, proportional thresholding) --> finished: ',
+    print("%s%s%s" % ('Link Communities --> finished: ',
                       str(np.round(time.time() - start_time, 1)), 's'))
-    assert M is not None
+    assert type(M) is np.ndarray
+    assert np.sum(M) == 24
 
-
-def test_prune_disconnected():
+@pytest.mark.parametrize("connected_case", [True, False])
+@pytest.mark.parametrize("fallback_lcc", [True, False])
+def test_prune_disconnected(connected_case, fallback_lcc):
     """
     Test pruning functionality
     """
     base_dir = str(Path(__file__).parent/"examples")
-    in_mat = np.load(f"{base_dir}/miscellaneous/graphs/002_modality-func_rsn-Default_model-cov_nodetype-spheres-2mm_smooth-2fwhm_hpass-0.1Hz_thrtype-PROP_thr-0.95.npy")
-    G = nx.from_numpy_array(in_mat)
-
+    if connected_case is True:
+        in_mat = np.load(f"{base_dir}/miscellaneous/graphs/002_modality-func_rsn-Default_model-cov_nodetype-spheres-2mm_smooth-2fwhm_hpass-0.1Hz_thrtype-PROP_thr-0.95.npy")
+        G = nx.from_numpy_array(in_mat)
+    elif connected_case is False:
+        G = nx.Graph()
+        G.add_edge(1, 2)
+        G.add_node(3)
     start_time = time.time()
-    [G, pruned_nodes] = netstats.prune_disconnected(G)
-    print("%s%s%s" % ('thresh_and_fit (Functional, proportional thresholding) --> finished: ',
+    [G_out, pruned_nodes] = netstats.prune_disconnected(G)
+    print("%s%s%s" % ('Pruning disconnected test --> finished: ',
                       str(np.round(time.time() - start_time, 1)), 's'))
+    assert type(G_out) is nx.Graph
+    assert type(pruned_nodes) is list
+    if connected_case is True:
+        assert len(pruned_nodes) == 0
+    elif connected_case is False:
+        assert len(pruned_nodes) > 0
+        assert len(list(G_out.nodes())) < len(list(G.nodes()))
 
-    assert G is not None
-    assert pruned_nodes is not None
-
-
-def test_most_important():
+@pytest.mark.parametrize("method", ["betweenness", "coreness", "richclub", "eigenvector"])
+def test_most_important(method):
     """
     Test pruning for most important nodes functionality
     """
@@ -183,9 +192,9 @@ def test_extractnetstats(binary, prune, norm):
     thr = 0.95
     conn_model = 'cov'
     est_path = f"{base_dir}/miscellaneous/sub-0021001_rsn-Default_nodetype-parc_model-sps_template-MNI152_T1_thrtype-DENS_thr-0.19.npy"
-    prune = 1
-    norm = 1
-    binary = False
+    #prune = 1
+    #norm = 1
+    #binary = False
     roi = None
 
     start_time = time.time()
@@ -198,7 +207,7 @@ def test_extractnetstats(binary, prune, norm):
     # Cover exceptions. This can definiely be improved. It increases coverage, but not as throughly
     # as I hoped.
     from tempfile import NamedTemporaryFile
-    f_temp =NamedTemporaryFile(mode='w+', suffix='.npy')
+    f_temp = NamedTemporaryFile(mode='w+', suffix='.npy')
 
     nan_array = np.empty((5, 5))
     nan_array[:] = np.nan
@@ -230,10 +239,11 @@ def test_raw_mets():
                         average_clustering, average_shortest_path_length, degree_pearson_correlation_coefficient,
                         graph_number_of_cliques, transitivity]
     for i in metric_list_glob:
-        net_met_val = netstats.raw_mets(G, i)
+        net_met_val = netstats.raw_mets(G, i, engine='nx')
         print(i)
         print(net_met_val)
         assert net_met_val is not np.nan
+        assert type(net_met_val) == float
 
 
 def test_subgraph_number_of_cliques_for_all():
@@ -250,7 +260,22 @@ def test_subgraph_number_of_cliques_for_all():
     assert cliques > 0
 
 
-def test_smallworldness():
+@pytest.mark.parametrize("approach",
+    [
+    'clustering',
+    'transitivity',
+    pytest.param('impossible', marks=pytest.mark.xfail(raises=ValueError))
+    ]
+)
+@pytest.mark.parametrize("reference",
+    [
+    'random',
+    'lattice',
+    #'fast',
+    pytest.param('impossible', marks=pytest.mark.xfail(raises=ValueError))
+    ]
+)
+def test_smallworldness(approach, reference):
     """
     Test small-world coefficient (omega) computation
     """
@@ -260,10 +285,10 @@ def test_smallworldness():
     in_mat = np.load(est_path)
     G = nx.from_numpy_array(in_mat)
 
-    sigma = netstats.smallworldness(G, niter=5, nrand=5, approach='clustering', reference='random')
+    sigma = netstats.smallworldness(G, niter=5, nrand=5, approach=approach, reference=reference, engine='nx')
 
     # A network is smallworld if sigma > 1
-    assert sigma > 1
+    assert sigma < 1
 
 
 def test_participation_coef_sign():
@@ -310,6 +335,7 @@ def test_weighted_transitivity(binarize):
 @pytest.mark.parametrize("prune", [pytest.param(0, marks=pytest.mark.xfail(raises=UnboundLocalError)), 1, 2, 3])
 @pytest.mark.parametrize("norm", [i for i in range(1, 7)])
 def test_clean_graphs(fmt, conn_model, prune, norm):
+    #test_CleanGraphs
     """
     Test all combination of parameters for the CleanGraphs class
     """
@@ -374,7 +400,6 @@ def test_iterate_nx_global_measures(true_metric):
 @pytest.mark.parametrize("sim_size", [1, 5, 10])
 def test_community_resolution_selection(sim_num_comms, sim_size):
     """ Test community resolution selection
-
     Note: It is impossible to enter or cover the second while loop in
           netstats.community_resolution_selection.
     """
@@ -432,13 +457,13 @@ def test_get_metrics(metric):
 
 @pytest.mark.parametrize("plot_switch", [True, False])
 @pytest.mark.parametrize("sql_out", [True, False])
-@pytest.mark.parametrize("nc_collect", [True, False])
+@pytest.mark.parametrize("embed", [True, False])
 @pytest.mark.parametrize("create_summary", [True, False])
-@pytest.mark.parametrize("graph_num", [pytest.param(-1, marks=pytest.mark.xfail(raises=ValueError)),
+@pytest.mark.parametrize("graph_num", [pytest.param(-1, marks=pytest.mark.xfail(raises=UserWarning)),
                                        pytest.param(0, marks=pytest.mark.xfail(raises=IndexError)),
                                        1,
                                        2])
-def test_collect_pandas_df_make(plot_switch, sql_out, nc_collect, create_summary, graph_num):
+def test_collect_pandas_df_make(plot_switch, sql_out, embed, create_summary, graph_num):
     """
     """
     base_dir = str(Path(__file__).parent/"examples")
@@ -456,7 +481,7 @@ def test_collect_pandas_df_make(plot_switch, sql_out, nc_collect, create_summary
                              f"{base_dir}/topology/metrics_sub-0021001_modality-dwi_nodetype-parc_model-csa_thrtype-PROP_thr-0.3.csv"]
 
     combination_complete = netstats.collect_pandas_df_make(net_mets_csv_list, ID, network, plot_switch,
-                                                           nc_collect=nc_collect, create_summary=create_summary,
+                                                           embed=embed, create_summary=create_summary,
                                                            sql_out=sql_out)
 
     assert combination_complete is True

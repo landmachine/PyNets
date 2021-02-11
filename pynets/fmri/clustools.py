@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Nov  7 10:40:07 2017
-Copyright (C) 2017
+Copyright (C) 2016
 @author: Derek Pisner (dPys)
 """
-import indexed_gzip
+import sys
+if sys.platform.startswith('win') is False:
+    import indexed_gzip
 import nibabel as nib
 import numpy as np
 import warnings
@@ -70,21 +72,22 @@ def indx_3dto1d(idx, sz):
 
 def ncut(W, nbEigenValues):
     """
-    This function performs the first step of normalized cut spectral clustering.
-    The normalized LaPlacian is calculated on the similarity matrix W, and top
-    nbEigenValues eigenvectors are calculated. The number of eigenvectors
-    corresponds to the maximum number of classes (K) that will be produced by the
-    clustering algorithm.
+    This function performs the first step of normalized cut spectral
+    clustering. The normalized LaPlacian is calculated on the similarity
+    matrix W, and top nbEigenValues eigenvectors are calculated. The number of
+    eigenvectors corresponds to the maximum number of classes (K) that will be
+    produced by the clustering algorithm.
 
     Parameters
     ----------
     W : array
-        Numpy array containing a symmetric #feature x #feature sparse matrix representing the
-        similarity between voxels, traditionally this matrix should be positive semidefinite,
-        but regularization is employed to allow negative matrix entries (Yu 2001).
+        Numpy array containing a symmetric #feature x #feature sparse matrix
+        representing the similarity between voxels, traditionally this matrix
+        should be positive semidefinite, but regularization is employed to
+        allow negative matrix entries (Yu 2001).
     nbEigenValues : int
-        Number of eigenvectors that should be calculated, this determines the maximum number
-        of clusters (K) that can be derived from the result.
+        Number of eigenvectors that should be calculated, this determines the
+        maximum number of clusters (K) that can be derived from the result.
 
     Returns
     -------
@@ -95,14 +98,16 @@ def ncut(W, nbEigenValues):
 
     References
     ----------
-    .. [1] Stella Yu and Jianbo Shi, "Understanding Popout through Repulsion," Computer
-      Vision and Pattern Recognition, December, 2001.
-    .. [2] Shi, J., & Malik, J. (2000).  Normalized cuts and image segmentation. IEEE
-      Transactions on Pattern Analysis and Machine Intelligence, 22(8), 888-905.
-      doi: 10.1109/34.868688.
-    .. [3] Yu, S. X., & Shi, J. (2003). Multiclass spectral clustering. Proceedings Ninth
-      IEEE International Conference on Computer Vision, (1), 313-319 vol.1. Ieee.
-      doi: 10.1109/ICCV.2003.1238361
+    .. [1] Stella Yu and Jianbo Shi, "Understanding Popout through Repulsion,"
+      Computer Vision and Pattern Recognition, December, 2001.
+    .. [2] Shi, J., & Malik, J. (2000).  Normalized cuts and image
+      segmentation. IEEE
+      Transactions on Pattern Analysis and Machine Intelligence, 22(8),
+      888-905. doi: 10.1109/34.868688.
+    .. [3] Yu, S. X., & Shi, J. (2003). Multiclass spectral clustering.
+      Proceedings Ninth
+      IEEE International Conference on Computer Vision, (1), 313-319 vol.1.
+      Ieee. doi: 10.1109/ICCV.2003.1238361
 
     """
     from scipy.sparse.linalg import eigsh
@@ -151,21 +156,22 @@ def ncut(W, nbEigenValues):
 def discretisation(eigen_vec):
     """
     This function performs the second step of normalized cut clustering which
-    assigns features to clusters based on the eigen vectors from the LaPlacian of
-    a similarity matrix. There are a few different ways to perform this task. Shi
-    and Malik (2000) iteratively bisect the features based on the positive and
-    negative loadings of the eigenvectors. Ng, Jordan and Weiss (2001) proposed to
-    perform K-means clustering on the rows of the eigenvectors. The method
+    assigns features to clusters based on the eigen vectors from the LaPlacian
+    of a similarity matrix. There are a few different ways to perform this
+    task. Shi and Malik (2000) iteratively bisect the features based on the
+    positive and negative loadings of the eigenvectors. Ng, Jordan and Weiss
+    (2001) proposed to perform K-means clustering on the rows of the
+    eigenvectors. The method
     implemented here was proposed by Yu and Shi (2003) and it finds a discrete
     solution by iteratively rotating a binarised set of vectors until they are
-    maximally similar to the the eigenvectors. An advantage of this method over K-means
-    is that it is _more_ deterministic, i.e. you should get very similar results
-    every time you run the algorithm on the same data.
+    maximally similar to the the eigenvectors. An advantage of this method
+    over K-means is that it is _more_ deterministic, i.e. you should get very
+    similar results every time you run the algorithm on the same data.
 
-    The number of clusters that the features are clustered into is determined by
-    the number of eignevectors (number of columns) in the input array eigen_vec. A
-    caveat of this method, is that number of resulting clusters is bound by the
-    number of eignevectors, but it may contain less.
+    The number of clusters that the features are clustered into is determined
+    by the number of eignevectors (number of columns) in the input array
+    eigen_vec. A caveat of this method, is that number of resulting clusters
+    is bound by the number of eignevectors, but it may contain less.
 
     Parameters
     ----------
@@ -184,14 +190,15 @@ def discretisation(eigen_vec):
 
     References
     ----------
-    .. [1] Stella Yu and Jianbo Shi, "Understanding Popout through Repulsion," Computer
-      Vision and Pattern Recognition, December, 2001.
-    .. [2] Shi, J., & Malik, J. (2000).  Normalized cuts and image segmentation. IEEE
-      Transactions on Pattern Analysis and Machine Intelligence, 22(8), 888-905.
-      doi: 10.1109/34.868688.
-    .. [3] Yu, S. X., & Shi, J. (2003). Multiclass spectral clustering. Proceedings Ninth
-      IEEE International Conference on Computer Vision, (1), 313-319 vol.1. Ieee.
-      doi: 10.1109/ICCV.2003.1238361
+    .. [1] Stella Yu and Jianbo Shi, "Understanding Popout through Repulsion,"
+      Computer Vision and Pattern Recognition, December, 2001.
+    .. [2] Shi, J., & Malik, J. (2000).  Normalized cuts and image
+      segmentation. IEEE
+      Transactions on Pattern Analysis and Machine Intelligence, 22(8),
+      888-905. doi: 10.1109/34.868688.
+    .. [3] Yu, S. X., & Shi, J. (2003). Multiclass spectral clustering.
+      Proceedings Ninth IEEE International Conference on Computer Vision,
+      (1), 313-319 vol.1. Ieee. doi: 10.1109/ICCV.2003.1238361
 
     """
     import scipy as sp
@@ -232,8 +239,10 @@ def discretisation(eigen_vec):
         nbIterationsDiscretisation = 0
         nbIterationsDiscretisationMax = 20
 
-        # Iteratively rotate the discretised eigenvectors until they are maximally similar to the input eignevectors,
-        # this converges when the differences between the current solution and the previous solution differs by less
+        # Iteratively rotate the discretised eigenvectors until they are
+        # maximally similar to the input eignevectors,
+        # this converges when the differences between the current solution
+        # and the previous solution differs by less
         # than eps or we have reached the maximum number of itarations
         while exitLoop == 0:
             nbIterationsDiscretisation = nbIterationsDiscretisation + 1
@@ -258,9 +267,10 @@ def discretisation(eigen_vec):
             # Catch a SVD convergence error and restart
             try:
                 [U, S, Vh] = svd(tSVD)
-            except LinAlgError:
+            except LinAlgError as e:
                 # Catch exception and go back to the beginning of the loop
-                print("SVD did not converge. Randomizing and trying again...")
+                print(e, "SVD did not converge. "
+                         "Randomizing and trying again...")
                 break
 
             # Test for convergence
@@ -289,12 +299,14 @@ def parcellate_ncut(W, k, mask_img):
     Parameters
     ----------
     W : Compressed Sparse Matrix
-        A Scipy sparse matrix, with weights corresponding to the temporal/spatial
-        correlation between the time series from voxel i and voxel j.
+        A Scipy sparse matrix, with weights corresponding to the
+        temporal/spatial correlation between the time series from voxel i
+        and voxel j.
     k : int
         Numbers of clusters that will be generated.
     mask_img : Nifti1Image
-        3D NIFTI file containing a mask, which restricts the voxels used in the analysis.
+        3D NIFTI file containing a mask, which restricts the voxels used in
+        the analysis.
 
     References
     ----------
@@ -321,7 +333,7 @@ def parcellate_ncut(W, k, mask_img):
 
     unique_a = sorted(set(np.array(a.flatten().tolist()[0])))
 
-    # Renumber clusters to make them contiguous
+    # Renumber clusters to make them non-contiguous
     b = np.zeros((len(a), 1))
     for i in range(0, len(unique_a)):
         b[a == unique_a[i]] = i + 1
@@ -740,30 +752,34 @@ class NiParcellate(object):
         k : int
             Numbers of clusters that will be generated.
         clust_type : str
-            Type of clustering to be performed (e.g. 'ward', 'kmeans', 'complete', 'average').
+            Type of clustering to be performed (e.g. 'ward', 'kmeans',
+            'complete', 'average').
         local_corr : str
-            Type of local connectivity to use as the basis for clustering methods. Options are tcorr or scorr.
-            Default is tcorr.
+            Type of local connectivity to use as the basis for clustering
+            methods. Options are tcorr or scorr. Default is tcorr.
         outdir : str
             Path to base derivatives directory.
         conf : str
-            File path to a confound regressor file for reduce noise in the time-series when extracting from ROI's.
+            File path to a confound regressor file for reduce noise in the
+            time-series when extracting from ROI's.
         mask : str
             File path to a 3D NIFTI file containing a mask, which restricts the
             voxels used in the analysis.
 
         References
         ----------
-        .. [1] Thirion, B., Varoquaux, G., Dohmatob, E., & Poline, J. B. (2014).
-          Which fMRI clustering gives good brain parcellations?
+        .. [1] Thirion, B., Varoquaux, G., Dohmatob, E., & Poline, J. B.
+          (2014). Which fMRI clustering gives good brain parcellations?
           Frontiers in Neuroscience. https://doi.org/10.3389/fnins.2014.00167
-        .. [2] Bellec, P., Rosa-Neto, P., Lyttelton, O. C., Benali, H., & Evans, A. C. (2010).
-          Multi-level bootstrap analysis of stable clusters in resting-state fMRI.
-          NeuroImage. https://doi.org/10.1016/j.neuroimage.2010.02.082
-        .. [3] Garcia-Garcia, M., Nikolaidis, A., Bellec, P., Craddock, R. C., Cheung, B.,
-          Castellanos, F. X., & Milham, M. P. (2018). Detecting stable individual
-          differences in the functional organization of the human basal ganglia.
-          NeuroImage. https://doi.org/10.1016/j.neuroimage.2017.07.029
+        .. [2] Bellec, P., Rosa-Neto, P., Lyttelton, O. C., Benali, H., &
+          Evans, A. C. (2010). Multi-level bootstrap analysis of stable
+          clusters in resting-state fMRI. NeuroImage.
+          https://doi.org/10.1016/j.neuroimage.2010.02.082
+        .. [3] Garcia-Garcia, M., Nikolaidis, A., Bellec, P.,
+          Craddock, R. C., Cheung, B., Castellanos, F. X., & Milham, M. P.
+          (2018). Detecting stable individual differences in the functional
+          organization of the human basal ganglia. NeuroImage.
+          https://doi.org/10.1016/j.neuroimage.2017.07.029
 
         """
         self.func_file = func_file
@@ -915,6 +931,7 @@ class NiParcellate(object):
                     "k must minimally be greater than the total number of "
                     "connected components in "
                     "the mask in the case of agglomerative clustering.")
+
             if self.local_corr == "tcorr" or self.local_corr == "scorr":
                 self._local_conn_mat_path = (
                     f"{self.uatlas.split('.nii')[0]}_"
@@ -939,7 +956,6 @@ class NiParcellate(object):
                     else:
                         raise ValueError(
                             "Local connectivity type not available")
-
                     print(
                         f"Saving spatially constrained connectivity structure"
                         f" to: {self._local_conn_mat_path}"
@@ -953,6 +969,7 @@ class NiParcellate(object):
                         "Must select either `tcorr` or `scorr` local "
                         "connectivity option if you are using "
                         "`ncut` clustering method")
+
                 self._local_conn = "auto"
             else:
                 raise ValueError(

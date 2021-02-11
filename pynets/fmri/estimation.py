@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Nov  7 10:40:07 2017
-Copyright (C) 2017
+Copyright (C) 2016
 @author: Derek Pisner (dPys)
 """
 import warnings
 import numpy as np
-import indexed_gzip
+import sys
+if sys.platform.startswith('win') is False:
+    import indexed_gzip
 
 warnings.filterwarnings("ignore")
 
@@ -16,7 +18,7 @@ def get_optimal_cov_estimator(time_series):
     from sklearn.covariance import GraphicalLassoCV
 
     estimator = GraphicalLassoCV(cv=5, assume_centered=True)
-    print("\nSearching for best Lasso estimator...\n")
+    print("\nSearching for best Lasso...\n")
     try:
         estimator.fit(time_series)
         return estimator
@@ -25,7 +27,7 @@ def get_optimal_cov_estimator(time_series):
         print("\nModel did not converge on first attempt. "
               "Varying tolerance...\n")
         while not hasattr(estimator, 'covariance_') and \
-            not hasattr(estimator, 'precision_') and ix < 3:
+                not hasattr(estimator, 'precision_') and ix < 3:
             for tol in [0.1, 0.01, 0.001, 0.0001]:
                 print(f"Tolerance={tol}")
                 estimator = GraphicalLassoCV(cv=5, max_iter=200, tol=tol,
@@ -100,24 +102,26 @@ def get_conn_matrix(
     Parameters
     ----------
     time_series : array
-        2D m x n array consisting of the time-series signal for each ROI node where m = number of scans and
-        n = number of ROI's.
+        2D m x n array consisting of the time-series signal for each ROI node
+        where m = number of scans and n = number of ROI's.
     conn_model : str
-       Connectivity estimation model (e.g. corr for correlation, cov for covariance, sps for precision covariance,
-       partcorr for partial correlation). sps type is used by default.
+       Connectivity estimation model (e.g. corr for correlation, cov for
+       covariance, sps for precision covariance, partcorr for partial
+       correlation). sps type is used by default.
     dir_path : str
         Path to directory containing subject derivative data for given run.
     node_size : int
-        Spherical centroid node size in the case that coordinate-based centroids
-        are used as ROI's.
+        Spherical centroid node size in the case that coordinate-based
+        centroids are used as ROI's.
     smooth : int
-        Smoothing width (mm fwhm) to apply to time-series when extracting signal from ROI's.
+        Smoothing width (mm fwhm) to apply to time-series when extracting
+        signal from ROI's.
     dens_thresh : bool
         Indicates whether a target graph density is to be used as the basis for
         thresholding.
     network : str
-        Resting-state network based on Yeo-7 and Yeo-17 naming (e.g. 'Default') used to filter nodes in the study of
-        brain subgraphs.
+        Resting-state network based on Yeo-7 and Yeo-17 naming
+        (e.g. 'Default') used to filter nodes in the study of brain subgraphs.
     ID : str
         A subject id or other unique identifier.
     roi : str
@@ -149,28 +153,31 @@ def get_conn_matrix(
     hpass : bool
         High-pass filter values (Hz) to apply to node-extracted time-series.
     extract_strategy : str
-        The name of a valid function used to reduce the time-series region extraction.
+        The name of a valid function used to reduce the time-series region
+        extraction.
 
     Returns
     -------
     conn_matrix : array
         Adjacency matrix stored as an m x n array of nodes and edges.
     conn_model : str
-       Connectivity estimation model (e.g. corr for correlation, cov for covariance, sps for precision covariance,
-       partcorr for partial correlation). sps type is used by default.
+       Connectivity estimation model (e.g. corr for correlation, cov for
+       covariance, sps for precision covariance, partcorr for partial
+       correlation). sps type is used by default.
     dir_path : str
         Path to directory containing subject derivative data for given run.
     node_size : int
-        Spherical centroid node size in the case that coordinate-based centroids
-        are used as ROI's for tracking.
+        Spherical centroid node size in the case that coordinate-based
+        centroids are used as ROI's for tracking.
     smooth : int
-        Smoothing width (mm fwhm) to apply to time-series when extracting signal from ROI's.
+        Smoothing width (mm fwhm) to apply to time-series when extracting
+        signal from ROI's.
     dens_thresh : bool
         Indicates whether a target graph density is to be used as the basis for
         thresholding.
     network : str
-        Resting-state network based on Yeo-7 and Yeo-17 naming (e.g. 'Default') used to filter nodes in the study of
-        brain subgraphs.
+        Resting-state network based on Yeo-7 and Yeo-17 naming
+        (e.g. 'Default') used to filter nodes in the study of brain subgraphs.
     ID : str
         A subject id or other unique identifier.
     roi : str
@@ -202,16 +209,21 @@ def get_conn_matrix(
     hpass : bool
         High-pass filter values (Hz) to apply to node-extracted time-series.
     extract_strategy : str
-        The name of a valid function used to reduce the time-series region extraction.
+        The name of a valid function used to reduce the time-series region
+        extraction.
 
     References
     ----------
-    .. [1] Varoquaux, G., & Craddock, R. C. (2013). Learning and comparing functional connectomes
-      across subjects. NeuroImage. https://doi.org/10.1016/j.neuroimage.2013.04.007
-    .. [2] Jason Laska, Manjari Narayan, 2017. skggm 0.2.7: A scikit-learn compatible package
-      for Gaussian and related Graphical Models. doi:10.5281/zenodo.830033
+    .. [1] Varoquaux, G., & Craddock, R. C. (2013). Learning and comparing
+      functional connectomes across subjects. NeuroImage.
+      https://doi.org/10.1016/j.neuroimage.2013.04.007
+    .. [2] Jason Laska, Manjari Narayan, 2017. skggm 0.2.7:
+      A scikit-learn compatible package for Gaussian and related Graphical
+      Models. doi:10.5281/zenodo.830033
 
     """
+    import sys
+    from pynets.core import utils
     from pynets.fmri.estimation import get_optimal_cov_estimator
     from nilearn.connectome import ConnectivityMeasure
 
@@ -223,7 +235,7 @@ def get_conn_matrix(
     conn_matrix = None
     estimator = get_optimal_cov_estimator(time_series)
 
-    def fallback_covariance(time_series):
+    def _fallback_covariance(time_series):
         from sklearn.ensemble import IsolationForest
         from sklearn import covariance
 
@@ -239,14 +251,14 @@ def get_conn_matrix(
               'ill conditions. Removing potential anomalies from the '
               'time-series using IsolationForest...')
         try:
-            print("Trying Ledoit-Wolf Estimator...")
+            print("Attempting with Ledoit-Wolf...")
             conn_measure = ConnectivityMeasure(
                 cov_estimator=covariance.LedoitWolf(store_precision=True,
                                                     assume_centered=True),
                 kind=kind)
             conn_matrix = conn_measure.fit_transform([time_series])[0]
         except (np.linalg.linalg.LinAlgError, FloatingPointError):
-            print("Trying Oracle Approximating Shrinkage Estimator...")
+            print("Attempting Oracle Approximating Shrinkage Estimator...")
             conn_measure = ConnectivityMeasure(
                 cov_estimator=covariance.OAS(assume_centered=True),
                 kind=kind)
@@ -255,19 +267,24 @@ def get_conn_matrix(
             except (np.linalg.linalg.LinAlgError, FloatingPointError):
                 raise ValueError('All covariance estimators failed to '
                                  'converge...')
+
         return conn_matrix
 
     if conn_model in nilearn_kinds:
-        if conn_model == "corr" or conn_model == "cor" or conn_model == "correlation":
+        if conn_model == "corr" or conn_model == "cor" or \
+                conn_model == "correlation":
             print("\nComputing correlation matrix...\n")
-            kind="correlation"
-        elif conn_model == "partcorr" or conn_model == "parcorr" or conn_model == "partialcorrelation":
+            kind = "correlation"
+        elif conn_model == "partcorr" or conn_model == "parcorr" or \
+                conn_model == "partialcorrelation":
             print("\nComputing partial correlation matrix...\n")
-            kind="partial correlation"
-        elif conn_model == "sps" or conn_model == "sparse" or conn_model == "precision":
+            kind = "partial correlation"
+        elif conn_model == "sps" or conn_model == "sparse" or \
+                conn_model == "precision":
             print("\nComputing precision matrix...\n")
-            kind="precision"
-        elif conn_model == "cov" or conn_model == "covariance" or conn_model == "covar":
+            kind = "precision"
+        elif conn_model == "cov" or conn_model == "covariance" or \
+                conn_model == "covar":
             print("\nComputing covariance matrix...\n")
             kind = "covariance"
         else:
@@ -282,29 +299,30 @@ def get_conn_matrix(
             try:
                 conn_matrix = conn_measure.fit_transform([time_series])[0]
             except (np.linalg.linalg.LinAlgError, FloatingPointError):
-                conn_matrix = fallback_covariance(time_series)
+                conn_matrix = _fallback_covariance(time_series)
         else:
-            conn_matrix = fallback_covariance(time_series)
+            conn_matrix = _fallback_covariance(time_series)
     else:
         if conn_model == "QuicGraphicalLasso":
             try:
                 from inverse_covariance import QuicGraphicalLasso
-            except ImportError:
-                print("Cannot run QuicGraphLasso. Skggm not installed!")
+            except ImportError as e:
+                print(e, "Cannot run QuicGraphLasso. Skggm not installed!")
 
             # Compute the sparse inverse covariance via QuicGraphLasso
             # credit: skggm
             model = QuicGraphicalLasso(
                 init_method="cov", lam=0.5, mode="default", verbose=1
             )
-            print("\nCalculating QuicGraphLasso precision matrix using skggm...\n")
+            print("\nCalculating QuicGraphLasso precision matrix using "
+                  "skggm...\n")
             model.fit(time_series)
             conn_matrix = model.precision_
         elif conn_model == "QuicGraphicalLassoCV":
             try:
                 from inverse_covariance import QuicGraphicalLassoCV
-            except ImportError:
-                print("Cannot run QuicGraphLassoCV. Skggm not installed!")
+            except ImportError as e:
+                print(e, "Cannot run QuicGraphLassoCV. Skggm not installed!")
 
             # Compute the sparse inverse covariance via QuicGraphLassoCV
             # credit: skggm
@@ -316,8 +334,8 @@ def get_conn_matrix(
         elif conn_model == "QuicGraphicalLassoEBIC":
             try:
                 from inverse_covariance import QuicGraphicalLassoEBIC
-            except ImportError:
-                print("Cannot run QuicGraphLassoEBIC. Skggm not installed!")
+            except ImportError as e:
+                print(e, "Cannot run QuicGraphLassoEBIC. Skggm not installed!")
 
             # Compute the sparse inverse covariance via QuicGraphLassoEBIC
             # credit: skggm
@@ -332,8 +350,8 @@ def get_conn_matrix(
                     AdaptiveQuicGraphicalLasso,
                     QuicGraphicalLassoEBIC,
                 )
-            except ImportError:
-                print("Cannot run AdaptiveGraphLasso. Skggm not installed!")
+            except ImportError as e:
+                print(e, "Cannot run AdaptiveGraphLasso. Skggm not installed!")
 
             # Compute the sparse inverse covariance via
             # AdaptiveGraphLasso + QuicGraphLassoEBIC + method='binary'
@@ -347,17 +365,46 @@ def get_conn_matrix(
             conn_matrix = model.estimator_.precision_
         else:
             raise ValueError(
-                "\nERROR! No connectivity model specified at runtime. Select a"
-                " valid estimator using the -mod flag.")
+                "\nNo connectivity model specified at runtime. "
+                "Select a valid estimator using the -mod flag.")
 
     # Enforce symmetry
     conn_matrix = np.nan_to_num(np.maximum(conn_matrix, conn_matrix.T))
 
+    if parc is True:
+        node_size = "parc"
+
+    # Save unthresholded
+    utils.save_mat(
+        conn_matrix,
+        utils.create_raw_path_func(
+            ID,
+            network,
+            conn_model,
+            roi,
+            dir_path,
+            node_size,
+            smooth,
+            hpass,
+            parc,
+            extract_strategy,
+        ),
+    )
+
     if conn_matrix.shape < (2, 2):
         raise RuntimeError(
-            "\nERROR! Matrix estimation selection yielded an empty or"
+            "\nMatrix estimation selection yielded an empty or"
             " 1-dimensional graph. "
             "Check time-series for errors or try using a different atlas")
+
+    if network is not None:
+        atlas_name = f"{atlas}_{network}_stage-rawgraph"
+    else:
+        atlas_name = f"{atlas}_stage-rawgraph"
+
+    utils.save_coords_and_labels_to_json(coords, labels, dir_path,
+                                         atlas_name, indices=None)
+
     coords = np.array(coords)
     labels = np.array(labels)
 
@@ -489,19 +536,16 @@ class TimeseriesExtraction(object):
         self._net_parcels_nii_temp_path = None
         self._net_parcels_map_nifti = None
         self._parcel_masker = None
-        with open(
-            pkg_resources.resource_filename("pynets", "runconfig.yaml"), "r"
-        ) as stream:
-            hardcoded_params = yaml.load(stream)
-            try:
-                self.low_pass = hardcoded_params["low_pass"][0]
-            except KeyError:
-                print(
-                    "ERROR: Plotting configuration not successfully extracted "
-                    "from runconfig.yaml"
-                )
-                sys.exit(0)
-        stream.close()
+
+        from pynets.core.utils import load_runconfig
+        hardcoded_params = load_runconfig()
+        try:
+            self.low_pass = hardcoded_params["low_pass"][0]
+        except KeyError as e:
+            print(e,
+                  "ERROR: Plotting configuration not successfully extracted "
+                  "from runconfig.yaml"
+                  )
 
     def prepare_inputs(self):
         """Helper function to creating temporary nii's and prepare inputs from
@@ -511,16 +555,17 @@ class TimeseriesExtraction(object):
         from nilearn.image import math_img
 
         if not op.isfile(self.func_file):
-            raise ValueError(
-                "\nERROR: Functional data input not found! Check that the"
+            raise FileNotFoundError(
+                "\nFunctional data input not found! Check that the"
                 " file(s) specified with the -i "
                 "flag exist(s)")
 
         if self.conf:
             if not op.isfile(self.conf):
-                raise ValueError(
-                    "\nERROR: Confound regressor file not found! Check that"
-                    " the file(s) specified with the -conf flag exist(s)")
+                raise FileNotFoundError(
+                    "\nConfound regressor file not found! Check "
+                    "that the file(s) specified with the -conf flag "
+                    "exist(s)")
 
         self._func_img = nib.load(self.func_file)
         self._func_img.set_data_dtype(np.float32)
@@ -614,7 +659,8 @@ class TimeseriesExtraction(object):
         self._func_img.uncache()
 
         if self.ts_within_nodes is None:
-            raise RuntimeError("\nERROR: Time-series extraction failed!")
+            raise RuntimeError("\nTime-series extraction failed!")
+
         else:
             self.node_size = "parc"
 

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Nov  7 10:40:07 2017
-Copyright (C) 2017
+Copyright (C) 2016
 @authors: Derek Pisner
 """
 import os
@@ -14,115 +14,14 @@ from sklearn.metrics.pairwise import (
 )
 from sklearn.utils import check_X_y
 from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer
+from sklearn.impute import IterativeImputer, SimpleImputer
 import pandas as pd
-import re
-import glob
-import dill
 import numpy as np
-import itertools
 import warnings
 from sklearn.preprocessing import StandardScaler
-from pynets.stats.prediction import make_subject_dict, cleanNullTerms, \
-    get_ensembles_top, build_grid, flatten_latent_positions
-
+from pynets.stats.utils import flatten_latent_positions
+from pynets.core.utils import flatten
 warnings.filterwarnings("ignore")
-
-
-def build_hp_dict(file_renamed, modality, hyperparam_dict, hyperparams):
-    """
-    A function to build a hyperparameter dictionary by parsing a given
-    file path.
-    """
-
-    for hyperparam in hyperparams:
-        if (
-            hyperparam != "smooth"
-            and hyperparam != "hpass"
-            and hyperparam != "track_type"
-            and hyperparam != "directget"
-            and hyperparam != "tol"
-            and hyperparam != "minlength"
-            and hyperparam != "samples"
-            and hyperparam != "nodetype"
-            and hyperparam != "template"
-            and hyperparam != "extract"
-
-        ):
-            if hyperparam not in hyperparam_dict.keys():
-                hyperparam_dict[hyperparam] = [
-                    file_renamed.split(hyperparam + "-")[1].split("_")[0]
-                ]
-            else:
-                hyperparam_dict[hyperparam].append(
-                    file_renamed.split(hyperparam + "-")[1].split("_")[0]
-                )
-
-    if modality == "func":
-        if "smooth-" in file_renamed:
-            if "smooth" not in hyperparam_dict.keys():
-                hyperparam_dict["smooth"] = [file_renamed.split(
-                    "smooth-")[1].split("_")[0].split("fwhm")[0]]
-            else:
-                hyperparam_dict["smooth"].append(0)
-            hyperparams.append("smooth")
-
-        if "hpass-" in file_renamed:
-            if "hpass" not in hyperparam_dict.keys():
-                hyperparam_dict["hpass"] = [file_renamed.split(
-                    "hpass-")[1].split("_")[0].split("Hz")[0]]
-            else:
-                hyperparam_dict["hpass"].append(
-                    file_renamed.split("hpass-"
-                                       )[1].split("_")[0].split("Hz")[0])
-            hyperparams.append("hpass")
-        if "extract-" in file_renamed:
-            if "extract" not in hyperparam_dict.keys():
-                hyperparam_dict["extract"] = [
-                    file_renamed.split("extract-")[1].split("_")[0]
-                ]
-            else:
-                hyperparam_dict["extract"].append(
-                    file_renamed.split("extract-")[1].split("_")[0]
-                )
-            hyperparams.append("extract")
-
-    elif modality == "dwi":
-        if "directget-" in file_renamed:
-            if "directget" not in hyperparam_dict.keys():
-                hyperparam_dict["directget"] = [
-                    file_renamed.split("directget-")[1].split("_")[0]
-                ]
-            else:
-                hyperparam_dict["directget"].append(
-                    file_renamed.split("directget-")[1].split("_")[0]
-                )
-            hyperparams.append("directget")
-        if "minlength-" in file_renamed:
-            if "minlength" not in hyperparam_dict.keys():
-                hyperparam_dict["minlength"] = [
-                    file_renamed.split("minlength-")[1].split("_")[0]
-                ]
-            else:
-                hyperparam_dict["minlength"].append(
-                    file_renamed.split("minlength-")[1].split("_")[0]
-                )
-            hyperparams.append("minlength")
-        if "tol-" in file_renamed:
-            if "tol" not in hyperparam_dict.keys():
-                hyperparam_dict["tol"] = [
-                    file_renamed.split("tol-")[1].split("_")[0]
-                ]
-            else:
-                hyperparam_dict["tol"].append(
-                    file_renamed.split("tol-")[1].split("_")[0]
-                )
-            hyperparams.append("tol")
-
-    for key in hyperparam_dict:
-        hyperparam_dict[key] = list(set(hyperparam_dict[key]))
-
-    return hyperparam_dict, hyperparams
 
 
 def discr_stat(
@@ -200,7 +99,7 @@ def discr_stat(
 
 def _discr_rdf(dissimilarities, labels):
     """
-    A function for computing the reliability density function of a dataset.
+    A function for computing the int_consist density function of a dataset.
 
     Parameters
     ----------
@@ -245,8 +144,8 @@ def beta_lin_comb(beta, GVDAT, meta):
     """
     This function calculates linear combinations of graph vectors stored in
     GVDAT for all subjects and all sessions given the weights vector beta.
-    This was adapted from a function of the same name, written by Kamil Bonna,
-    10.09.2018.
+    This was adapted from a function of the same name, written by Kamil Bonna
+    and Miriam Kosik 10.09.2018.
 
     Parameters
     ----------
@@ -290,223 +189,363 @@ def beta_lin_comb(beta, GVDAT, meta):
             for mod in range(N_mod):
                 for thr in range(N_thr):
                     gvlc += GVDAT[sesh][atl][mod][thr] * beta_atl[atl] * \
-                            beta_mod[mod] * beta_thr[thr]
+                        beta_mod[mod] * beta_thr[thr]
         gv_array[sesh] = gvlc
     return gv_array
 
 
-if __name__ == "__main__":
-    __spec__ = "ModuleSpec(name='builtins', loader=<class '_" \
-               "frozen_importlib.BuiltinImporter'>)"
-    base_dir = '/scratch/04171/dpisner/HNU/HNU_outs/triple'
-    thr_type = "MST"
-    icc = False
-    disc = True
-    reliability = False
+def benchmark_reproducibility(base_dir, comb, modality, alg, par_dict, disc,
+                              final_missingness_summary, icc_tmps_dir, icc,
+                              mets, ids, template):
+    import gc
+    import json
+    import glob
+    from pathlib import Path
+    import ast
+    import matplotlib
+    from pynets.stats.utils import gen_sub_vec
+    matplotlib.use('Agg')
 
-    #embedding_types = ['topology']
-    #embedding_types = ['topology', 'OMNI', 'ASE']
-    #embedding_types = ['ASE']
-    embedding_types = ['OMNI', 'ASE']
-    modalities = ['func', 'dwi']
-    template = 'MNI152_T1'
-    mets = ["global_efficiency",
-            "average_shortest_path_length",
-            "degree_assortativity_coefficient",
-            "average_betweenness_centrality",
-            "average_eigenvector_centrality",
-            "smallworldness",
-            "modularity"]
+    df_summary = pd.DataFrame(
+        columns=['grid', 'modality', 'embedding',
+                 'discriminability'])
+    print(comb)
+    df_summary.at[0, "modality"] = modality
+    df_summary.at[0, "embedding"] = alg
 
-    hyperparams_func = ["rsn", "res", "model", 'hpass', 'extract', 'smooth']
-    hyperparams_dwi = ["rsn", "res", "model", 'directget', 'minlength', 'tol']
-
-    sessions = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
-
-    subject_dict_file_path = f"{base_dir}/pynets_subject_dict_{'_'.join(embedding_types)}.pkl"
-
-    if not os.path.isfile(subject_dict_file_path):
-        subject_dict, modality_grids = make_subject_dict(modalities, base_dir,
-                                                         thr_type, mets,
-                                                         embedding_types,
-                                                         template,
-                                                         sessions)
-        sub_dict_clean = cleanNullTerms(subject_dict)
-
-        with open(subject_dict_file_path, 'wb') as f:
-            dill.dump(sub_dict_clean, f)
-        f.close()
+    if modality == 'func':
+        try:
+            extract, hpass, model, res, atlas, smooth = comb
+        except BaseException:
+            print(f"Missing {comb}...")
+            extract, hpass, model, res, atlas = comb
+            smooth = '0'
+        # comb_tuple = (atlas, extract, hpass, model, res, smooth)
+        comb_tuple = comb
     else:
-        with open(subject_dict_file_path, 'rb') as f:
-            sub_dict_clean = dill.load(f)
-        f.close()
+        directget, minlength, model, res, atlas, tol = comb
+        # comb_tuple = (atlas, directget, minlength, model, res, tol)
+        comb_tuple = comb
 
-    rsns = ['triple']
-    # rsns = ['SalVentAttnA', 'DefaultA', 'ContB']
+    df_summary.at[0, "grid"] = comb_tuple
 
-    for modality in modalities:
-        hyperparams = eval(f"hyperparams_{modality}")
-        hyperparam_dict = {}
+    # missing_sub_seshes = \
+    #     final_missingness_summary.loc[(final_missingness_summary['alg']==alg)
+    #                                   & (final_missingness_summary[
+    #                                          'modality']==modality) &
+    #                                   (final_missingness_summary[
+    #                                        'grid']==comb_tuple)
+    #                                   ].drop_duplicates(subset='id')
 
-        ensembles, df_top = get_ensembles_top(modality, thr_type,
-                                              f"{base_dir}/pynets")
-
-        grid = build_grid(modality, hyperparam_dict,
-                          sorted(list(set(hyperparams))), ensembles)[1]
-
-        for alg in embedding_types:
-            df_summary = pd.DataFrame(
-                columns=['grid', 'modality', 'embedding',
-                         'discriminability'])
-            ix = 0
-            for comb in grid:
-                df_summary.at[ix, "modality"] = modality
-                df_summary.at[ix, "embedding"] = alg
-                if modality == 'func':
-                    try:
-                        extract, hpass, model, res, atlas, smooth = comb
-                    except:
-                        print(f"Missing {comb}...")
-                        extract, hpass, model, res, atlas = comb
-                        smooth = 0
-                    comb_tuple = (atlas, extract, hpass, model, res, smooth)
-                else:
-                    directget, minlength, model, res, atlas, tol = comb
-                    comb_tuple = (atlas, directget, minlength, model, res, tol)
-
-                df_summary = df_summary.append(pd.Series(), ignore_index=True)
-                df_summary.at[ix, "grid"] = comb_tuple
-
-                # reliability
-                if reliability is True:
-                    try:
-                        import pingouin as pg
-                    except ImportError:
-                        print(
-                            "Cannot evaluate test-retest reliability. pingouin"
-                            " must be installed!")
-                    id_list = []
-                    jx = ix
-                    for met in mets:
-                        id_dict = {}
-                        for ID in sub_dict_clean.keys():
-                            id_dict[ID] = {}
-                            ses_list = []
-                            for ses in sub_dict_clean[ID].keys():
-                                if comb_tuple in sub_dict_clean[ID][ses][
-                                    modality][alg].keys():
-                                    id_dict[ID][ses] = sub_dict_clean[ID][ses][modality][alg][comb_tuple][mets.index(met)][0]
-                        df_wide = pd.DataFrame(id_dict).T
-                        if df_wide.empty:
-                            del df_wide
-                            ix += 1
-                            continue
-                        df_wide = df_wide.add_prefix(f"{met}_visit_")
-                        df_wide.replace(0, np.nan, inplace=True)
-                        try:
-                            c_alpha = pg.cronbach_alpha(data=df_wide)
-                        except:
-                            print('FAILED...')
-                            print(df_wide)
-                            del df_wide
-                            ix += 1
-                            continue
-                        df_summary.at[jx, f"cronbach_alpha_{met}"] = c_alpha[0]
-                        del df_wide
-                    del jx
-
-                # icc
-                if icc is True:
-                    try:
-                        import pingouin as pg
-                    except ImportError:
-                        print(
-                            "Cannot evaluate ICC. pingouin"
-                            " must be installed!")
-                    id_list = []
-                    mx = ix
-                    for met in mets:
-                        id_dict = {}
-                        dfs = []
-                        for ses in [str(i) for i in range(1, 11)]:
-                            for ID in sub_dict_clean.keys():
-                                id_dict[ID] = {}
-                                if comb_tuple in sub_dict_clean[ID][ses][
-                                    modality][alg].keys():
-                                    id_dict[ID][ses] = sub_dict_clean[ID][ses][modality][alg][comb_tuple][mets.index(met)][0]
-                                df = pd.DataFrame(id_dict).T
-                                if df.empty:
-                                    del df_long
-                                    ix += 1
-                                    continue
-                                df.columns.values[0] = f"{met}"
-                                df.replace(0, np.nan, inplace=True)
-                                df['id'] = df.index
-                                df['ses'] = ses
-                                df.reset_index(drop=True, inplace=True)
-                                dfs.append(df)
-                        df_long = pd.concat(dfs, names=['id', 'ses', f"{met}"]).drop(columns=[str(i) for i in range(1, 10)])
-                        try:
-                            c_icc = pg.intraclass_corr(data=df_long, targets='id', raters='ses', ratings=f"{met}", nan_policy='omit').round(3)
-                            c_icc = c_icc.set_index("Type")
-                            df_summary.at[mx, f"icc_{met}"] = pd.DataFrame(c_icc.drop(index=['ICC1', 'ICC2', 'ICC3'])['ICC']).mean()[0]
-                        except:
-                            print('FAILED...')
-                            print(df_long)
-                            del df_long
-                            ix += 1
-                            continue
-                        del df_long
-                    del mx
-
-                if disc is True:
-                    id_list = []
-                    vect_all = []
-                    kx = ix
-                    for ID in sub_dict_clean.keys():
-                        vects = []
-                        for ses in sub_dict_clean[ID].keys():
-                            if comb_tuple in sub_dict_clean[ID][ses][modality][alg].keys():
-                                id_list.append(ID)
-                                if alg == 'topology':
-                                    vect = sub_dict_clean[ID][ses][modality][alg][comb_tuple]
+    # icc
+    if icc is True and alg == 'topology':
+        try:
+            import pingouin as pg
+        except ImportError:
+            print(
+                "Cannot evaluate ICC. pingouin"
+                " must be installed!")
+        for met in mets:
+            id_dict = {}
+            dfs = []
+            for ses in [str(i) for i in range(1, 11)]:
+                for ID in ids:
+                    id_dict[ID] = {}
+                    if comb_tuple in par_dict[ID][str(ses)][modality][alg
+                                                                      ].keys():
+                        id_dict[ID][str(ses)] = \
+                            par_dict[ID][str(ses)][modality][alg][comb_tuple][
+                                mets.index(met)][0]
+                    df = pd.DataFrame(id_dict).T
+                    if df.empty:
+                        del df
+                        return df_summary
+                    df.columns.values[0] = f"{met}"
+                    df.replace(0, np.nan, inplace=True)
+                    df['id'] = df.index
+                    df['ses'] = ses
+                    df.reset_index(drop=True, inplace=True)
+                    dfs.append(df)
+            df_long = pd.concat(dfs, names=['id', 'ses', f"{met}"]).drop(
+                columns=[str(i) for i in range(1, 10)])
+            if '10' in df_long.columns:
+                df_long[f"{met}"] = df_long[f"{met}"].fillna(df_long['10'])
+                df_long = df_long.drop(columns='10')
+            try:
+                c_icc = pg.intraclass_corr(data=df_long, targets='id',
+                                           raters='ses', ratings=f"{met}",
+                                           nan_policy='omit').round(3)
+                c_icc = c_icc.set_index("Type")
+                c_icc3 = c_icc.drop(index=['ICC1', 'ICC2', 'ICC1k', 'ICC2k',
+                                           'ICC3'])
+                df_summary.at[0, f"icc_{met}"] = c_icc3['ICC'].values[0]
+                df_summary.at[0, f"icc_{met}_CI95%_L"] = \
+                    c_icc3['CI95%'].values[0][0]
+                df_summary.at[0, f"icc_{met}_CI95%_U"] = \
+                    c_icc3['CI95%'].values[0][1]
+            except BaseException:
+                print('FAILED...')
+                print(df_long)
+                del df_long
+                return df_summary
+            del df_long
+    elif icc is True and alg != 'topology':
+        import re
+        from pynets.stats.utils import parse_closest_ixs
+        try:
+            import pingouin as pg
+        except ImportError:
+            print(
+                "Cannot evaluate ICC. pingouin"
+                " must be installed!")
+        dfs = []
+        coords_frames = []
+        labels_frames = []
+        for ses in [str(i) for i in range(1, 11)]:
+            for ID in ids:
+                if ses in par_dict[ID].keys():
+                    if comb_tuple in par_dict[ID][str(ses)][modality][alg
+                                                                      ].keys():
+                        if 'data' in par_dict[ID][str(ses)][modality][alg][
+                                comb_tuple].keys():
+                            if par_dict[ID][str(ses)][modality][alg][
+                                    comb_tuple]['data'] is not None:
+                                if isinstance(par_dict[ID][str(ses)][
+                                        modality][alg][comb_tuple][
+                                        'data'], str):
+                                    data_path = par_dict[ID][str(ses)][
+                                        modality][alg][comb_tuple]['data']
+                                    parent_dir = Path(os.path.dirname(
+                                        par_dict[ID][str(ses)][modality][alg][
+                                            comb_tuple]['data'])).parent
+                                    if os.path.isfile(data_path):
+                                        try:
+                                            if data_path.endswith('.npy'):
+                                                emb_data = np.load(data_path)
+                                            elif data_path.endswith('.csv'):
+                                                emb_data = np.array(
+                                                    pd.read_csv(data_path)
+                                                ).reshape(-1, 1)
+                                            else:
+                                                emb_data = np.nan
+                                            node_files = glob.glob(
+                                                f"{parent_dir}/nodes/*.json")
+                                        except:
+                                            print(f"Failed to load data from "
+                                                  f"{data_path}..")
+                                            continue
+                                    else:
+                                        continue
                                 else:
-                                    vect = flatten_latent_positions('triple', sub_dict_clean, ID, ses, modality, comb_tuple[1:], alg)
-                                vects.append(vect)
-                        vects = [i for i in vects if i is not None]
-                        if len(vects) > 0 and alg == 'topology':
-                            vect_all.append(np.concatenate(vects, axis=1))
-                        elif len(vects) > 0:
-                            vect_all.append(pd.concat(vects, axis=0))
-                            del vects
-                    if len(vect_all) > 0:
-                        if alg == 'topology':
-                            X_top = np.swapaxes(np.hstack(vect_all), 0, 1)
-                            bad_ixs = [i[1] for i in
-                                       np.argwhere(np.isnan(X_top))]
-                            for m in set(bad_ixs):
-                                if (X_top.shape[0] - bad_ixs.count(m)) / \
-                                    X_top.shape[0] < 0.50:
-                                    X_top = np.delete(X_top, m, axis=1)
+                                    node_files = glob.glob(
+                                        f"{base_dir}/pynets/sub-{ID}/ses-"
+                                        f"{ses}/{modality}/rsn-"
+                                        f"{atlas}_res-{res}/nodes/*.json")
+                                    emb_data = par_dict[ID][str(ses)][
+                                        modality][alg][comb_tuple]['data']
+
+                                emb_shape = emb_data.shape[0]
+
+                                if len(node_files) > 0:
+                                    ixs, node_dict = parse_closest_ixs(
+                                        node_files, emb_shape,
+                                        template=template)
+                                    if len(ixs) != emb_shape:
+                                        ixs, node_dict = parse_closest_ixs(
+                                            node_files,
+                                            emb_shape)
+                                    if isinstance(node_dict, dict):
+                                        coords = [node_dict[i]['coord'] for i
+                                                  in node_dict.keys()]
+                                        labels = [node_dict[i][
+                                            'label'][
+                                            'BrainnetomeAtlas'
+                                            'Fan2016'] for i in
+                                            node_dict.keys()]
+                                    else:
+                                        print(f"Failed to parse coords/"
+                                              f"labels from {node_files}. "
+                                              f"Skipping...")
+                                        continue
+                                    df_coords = pd.DataFrame(
+                                        [str(tuple(x)) for x in
+                                         coords]).T
+                                    df_coords.columns = [
+                                        f"rsn-{atlas}_res-"
+                                        f"{res}_{i}"
+                                        for i in ixs]
+                                    # labels = [
+                                    #     list(i['label'])[7] for i
+                                    #     in
+                                    #     node_dict]
+                                    df_labels = pd.DataFrame(
+                                        labels).T
+                                    df_labels.columns = [
+                                        f"rsn-{atlas}_res-"
+                                        f"{res}_{i}"
+                                        for i in ixs]
+                                    coords_frames.append(df_coords)
+                                    labels_frames.append(df_labels)
+                                else:
+                                    print(f"No node files detected for "
+                                          f"{comb_tuple} and {ID}-{ses}...")
+                                    ixs = [i for i in par_dict[ID][str(ses)][
+                                        modality][alg][
+                                        comb_tuple]['index'] if i is not None]
+                                    coords_frames.append(pd.Series())
+                                    labels_frames.append(pd.Series())
+
+                                if len(ixs) == emb_shape:
+                                    df_pref = pd.DataFrame(emb_data.T,
+                                                           columns=[
+                                                               f"{alg}_{i}_rsn"
+                                                               f"-{atlas}_res-"
+                                                               f"{res}"
+                                                               for i in ixs])
+                                    df_pref['id'] = ID
+                                    df_pref['ses'] = ses
+                                    df_pref.replace(0, np.nan, inplace=True)
+                                    df_pref.reset_index(drop=True,
+                                                        inplace=True)
+                                    dfs.append(df_pref)
+                                else:
+                                    print(
+                                        f"Embedding shape {emb_shape} for "
+                                        f"{comb_tuple} does not correspond to "
+                                        f"{len(ixs)} indices found for "
+                                        f"{ID}-{ses}. Skipping...")
+                                    continue
                         else:
-                            X_top = np.array(pd.concat(vect_all, axis=0))
-                        Y = np.array(id_list)
-                        imp = IterativeImputer(max_iter=50, random_state=42)
-                        X_top = imp.fit_transform(X_top)
-                        scaler = StandardScaler()
-                        X_top = scaler.fit_transform(X_top)
-                        try:
-                            discr_stat_val, rdf = discr_stat(X_top, Y)
-                        except:
-                            ix += 1
+                            print(
+                                f"data not found in {comb_tuple}. Skipping...")
                             continue
-                        df_summary.at[kx, "discriminability"] = discr_stat_val
-                        print(discr_stat_val)
-                        # print(rdf)
-                        del discr_stat_val
-                    del kx
-                ix += 1
+                else:
+                    continue
 
-            df_summary = df_summary.dropna(axis=0, how='all')
+        if len(dfs) == 0:
+            return df_summary
 
-            df_summary.to_csv(f"{base_dir}/grid_clean_{modality}_{alg}.csv")
+        if len(coords_frames) > 0 and len(labels_frames) > 0:
+            coords_frames_icc = pd.concat(coords_frames)
+            labels_frames_icc = pd.concat(labels_frames)
+            nodes = True
+        else:
+            nodes = False
+
+        df_long = pd.concat(dfs, axis=0)
+        df_long = df_long.dropna(axis='columns', thresh=0.75 * len(df_long))
+        df_long = df_long.dropna(axis='rows', how='all')
+
+        dict_sum = df_summary.drop(columns=['grid', 'modality', 'embedding',
+                                            'discriminability']).to_dict()
+
+        for lp in [i for i in df_long.columns if 'ses' not in i and 'id' not
+                                                 in i]:
+            ix = int(lp.split(f"{alg}_")[1].split('_')[0])
+            rsn = lp.split(f"{alg}_{ix}_")[1]
+            df_long_clean = df_long[['id', 'ses', lp]]
+            # df_long_clean = df_long[['id', 'ses', lp]].loc[(df_long[['id',
+            # 'ses', lp]]['id'].duplicated() == True) & (df_long[['id', 'ses',
+            # lp]]['ses'].duplicated() == True) & (df_long[['id', 'ses',
+            # lp]][lp].isnull()==False)]
+            # df_long_clean[lp] = np.abs(df_long_clean[lp].round(6))
+            # df_long_clean['ses'] = df_long_clean['ses'].astype('int')
+            # g = df_long_clean.groupby(['ses'])
+            # df_long_clean = pd.DataFrame(g.apply(
+            #     lambda x: x.sample(g.size().min()).reset_index(drop=True))
+            #     ).reset_index(drop=True)
+            try:
+                c_icc = pg.intraclass_corr(data=df_long_clean, targets='id',
+                                           raters='ses', ratings=lp,
+                                           nan_policy='omit').round(3)
+                c_icc = c_icc.set_index("Type")
+                c_icc3 = c_icc.drop(
+                    index=['ICC1', 'ICC2', 'ICC1k', 'ICC2k', 'ICC3'])
+                icc_val = c_icc3['ICC'].values[0]
+                if nodes is True:
+                    coord_in = np.array(ast.literal_eval(
+                        coords_frames_icc[f"{rsn}_{ix}"].mode().values[0]),
+                        dtype=np.dtype("O"))
+                    label_in = np.array(
+                        labels_frames_icc[f"{rsn}_{ix}"].mode().values[0],
+                        dtype=np.dtype("O"))
+                else:
+                    coord_in = np.nan
+                    label_in = np.nan
+                dict_sum[f"{lp}_icc"] = icc_val
+                del c_icc, c_icc3, icc_val
+            except BaseException:
+                print(f"FAILED for {lp}...")
+                # print(df_long)
+                #df_summary.at[0, f"{lp}_icc"] = np.nan
+                coord_in = np.nan
+                label_in = np.nan
+
+            dict_sum[f"{lp}_coord"] = coord_in
+            dict_sum[f"{lp}_label"] = label_in
+
+        df_summary = pd.concat([df_summary,
+                                pd.DataFrame(pd.Series(dict_sum).T).T], axis=1)
+
+        print(df_summary)
+
+        tup_name = str(comb_tuple).replace('\', \'', '_').replace('(',
+                                                                  '').replace(
+            ')', '').replace('\'', '')
+        df_summary.to_csv(f"{icc_tmps_dir}/{alg}_{tup_name}.csv",
+                          index=False, header=True)
+        del df_long
+
+    # discriminability
+    if disc is True:
+        vect_all = []
+        for ID in ids:
+            try:
+                out = gen_sub_vec(base_dir, par_dict, ID, modality, alg,
+                                  comb_tuple)
+            except BaseException:
+                print(f"{ID} {modality} {alg} {comb_tuple} failed...")
+                continue
+            # print(out)
+            vect_all.append(out)
+        # ## TODO: Remove the .iloc below to include global efficiency.
+        # vect_all = [pd.DataFrame(i).iloc[1:] for i in vect_all if i is not
+        #             None and not np.isnan(np.array(i)).all()]
+        vect_all = [pd.DataFrame(i) for i in vect_all if i is not
+                    None and not np.isnan(np.array(i)).all()]
+
+        if len(vect_all) > 0:
+            if len(vect_all) > 0:
+                X_top = pd.concat(vect_all, axis=0, join="outer")
+                X_top = np.array(X_top.dropna(axis='columns',
+                                              thresh=0.50 * len(X_top)))
+            else:
+                print('Empty dataframe!')
+                return df_summary
+
+            shapes = []
+            for ix, i in enumerate(vect_all):
+                shapes.append(i.shape[0] * [list(ids)[ix]])
+            Y = np.array(list(flatten(shapes)))
+            if alg == 'topology':
+                imp = IterativeImputer(max_iter=50,
+                                       random_state=42)
+            else:
+                imp = SimpleImputer()
+            X_top = imp.fit_transform(X_top)
+            scaler = StandardScaler()
+            X_top = scaler.fit_transform(X_top)
+            try:
+                discr_stat_val, rdf = discr_stat(X_top, Y)
+                df_summary.at[0, "discriminability"] = discr_stat_val
+                print(discr_stat_val)
+                print("\n")
+                del discr_stat_val
+            except BaseException:
+                print('Discriminability calculation failed...')
+                return df_summary
+            # print(rdf)
+        del vect_all
+
+    gc.collect()
+    return df_summary

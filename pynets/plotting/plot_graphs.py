@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Nov  7 10:40:07 2017
-Copyright (C) 2017
+Copyright (C) 2016
 @author: Derek Pisner (dPys)
 """
 import warnings
@@ -31,10 +31,10 @@ def plot_conn_mat(conn_matrix, labels, out_path_fig, cmap, binarized=False,
     import warnings
     warnings.filterwarnings("ignore")
     import matplotlib
+    import mplcyberpunk
+    from matplotlib import pyplot as plt
     matplotlib.use("agg")
-    import sys
-    import pkg_resources
-    import yaml
+    plt.style.use("cyberpunk")
     from matplotlib import pyplot as plt
     from nilearn.plotting import plot_matrix
     from pynets.core import thresholding
@@ -43,25 +43,6 @@ def plot_conn_mat(conn_matrix, labels, out_path_fig, cmap, binarized=False,
     conn_matrix = thresholding.standardize(conn_matrix)
     conn_matrix_bin = thresholding.binarize(conn_matrix)
     conn_matrix_plt = np.nan_to_num(np.multiply(conn_matrix, conn_matrix_bin))
-
-    try:
-        with open(
-            pkg_resources.resource_filename("pynets", "runconfig.yaml"), "r"
-        ) as stream:
-            hardcoded_params = yaml.load(stream)
-            try:
-                labeling_atlas = \
-                hardcoded_params["plotting"]["labeling_atlas"][0]
-            except KeyError:
-                print(
-                    "ERROR: Plotting configuration not successfully extracted"
-                    " from runconfig.yaml"
-                )
-                sys.exit(0)
-        stream.close()
-        labels = [i[0][labeling_atlas] for i in labels]
-    except BaseException:
-        pass
 
     try:
         plot_matrix(
@@ -79,9 +60,19 @@ def plot_conn_mat(conn_matrix, labels, out_path_fig, cmap, binarized=False,
     except RuntimeWarning:
         print("Connectivity matrix too sparse for plotting...")
 
-    tick_interval = int(np.around(len(labels)))/20
+    if len(labels) > 500:
+        tick_interval = 5
+    elif len(labels) > 100:
+        tick_interval = 4
+    elif len(labels) > 50:
+        tick_interval = 2
+    else:
+        tick_interval = 1
+
     plt.axes().yaxis.set_major_locator(mticker.MultipleLocator(tick_interval))
     plt.axes().xaxis.set_major_locator(mticker.MultipleLocator(tick_interval))
+    for param in ['figure.facecolor', 'axes.facecolor', 'savefig.facecolor']:
+        plt.rcParams[param] = '#000000'
     plt.savefig(out_path_fig, dpi=dpi_resolution)
     plt.close()
     return
@@ -111,39 +102,21 @@ def plot_community_conn_mat(
     """
     import warnings
     warnings.filterwarnings("ignore")
-    import sys
-    import pkg_resources
-    import yaml
-    import matplotlib
-    import matplotlib.pyplot as plt
+    from matplotlib import pyplot as plt
+    matplotlib.use("agg")
+    import mplcyberpunk
+    plt.style.use("cyberpunk")
     import matplotlib.patches as patches
     import matplotlib.ticker as mticker
     matplotlib.use("agg")
     from nilearn.plotting import plot_matrix
     from pynets.core import thresholding
 
+    plt.style.use("cyberpunk")
+
     conn_matrix_bin = thresholding.binarize(conn_matrix)
     conn_matrix = thresholding.standardize(conn_matrix)
     conn_matrix_plt = np.nan_to_num(np.multiply(conn_matrix, conn_matrix_bin))
-
-    try:
-        with open(
-            pkg_resources.resource_filename("pynets", "runconfig.yaml"), "r"
-        ) as stream:
-            hardcoded_params = yaml.load(stream)
-            try:
-                labeling_atlas = \
-                hardcoded_params["plotting"]["labeling_atlas"][0]
-            except KeyError:
-                print(
-                    "ERROR: Plotting configuration not successfully extracted"
-                    " from runconfig.yaml"
-                )
-                sys.exit(0)
-        stream.close()
-        labels = [i[0][labeling_atlas] for i in labels]
-    except BaseException:
-        pass
 
     sorting_array = sorted(
         range(len(community_aff)),
@@ -192,16 +165,26 @@ def plot_community_conn_mat(
                 size,
                 size,
                 fill=False,
-                edgecolor="black",
+                edgecolor="white",
                 alpha=None,
                 linewidth=1,
             )
         )
         total_size += size
 
-    tick_interval = int(np.around(len(labels)))/20
+    if len(labels) > 500:
+        tick_interval = 5
+    elif len(labels) > 100:
+        tick_interval = 4
+    elif len(labels) > 50:
+        tick_interval = 2
+    else:
+        tick_interval = 1
+
     plt.axes().yaxis.set_major_locator(mticker.MultipleLocator(tick_interval))
     plt.axes().xaxis.set_major_locator(mticker.MultipleLocator(tick_interval))
+    for param in ['figure.facecolor', 'axes.facecolor', 'savefig.facecolor']:
+        plt.rcParams[param] = '#000000'
     plt.savefig(out_path_fig_comm, dpi=dpi_resolution)
     plt.close()
     return
@@ -263,59 +246,55 @@ def plot_conn_mat_func(
         extraction.
     """
     import matplotlib.pyplot as plt
-    import pkg_resources
-    import yaml
+    from pynets.core.utils import load_runconfig
     import sys
     import networkx as nx
     import os.path as op
     from pynets.plotting import plot_graphs
 
-    out_path_fig = "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s" % (dir_path,
-                                                         "/adjacency_",
-                                                         ID,
-                                                         "_modality-func_",
-                                                         "%s" % ("%s%s%s" % ("rsn-",
-                                                                             network,
-                                                                             "_") if network is not None else ""),
-                                                         "%s" % ("%s%s%s" % ("roi-",
-                                                                             op.basename(roi).split(".")[0],
-                                                                             "_") if roi is not None else ""),
-                                                         "model-",
-                                                         conn_model,
-                                                         "_",
-                                                         "%s" % ("%s%s%s" % ("nodetype-spheres-",
-                                                                             node_size,
-                                                                             "mm_") if (
-                                                             (node_size != "parc") and (
-                                                                 node_size is not None)) else "nodetype-parc_"),
-                                                         "%s" % ("%s%s%s" % ("smooth-",
-                                                                             smooth,
-                                                                             "fwhm_") if float(smooth) > 0 else ""),
-                                                         "%s" % ("%s%s%s" % ("hpass-",
-                                                                             hpass,
-                                                                             "Hz_") if hpass is not None else ""),
-                                                         "%s" % ("%s%s%s" % ("extract-",
-                                                                             extract_strategy,
-                                                                             "") if extract_strategy is not None else ""),
-                                                         "_thr-",
-                                                         thr,
-                                                         ".png",
-                                                         )
+    out_path_fig = \
+        "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s" % \
+        (dir_path,
+         "/adjacency_",
+         ID,
+         "_modality-func_",
+         "%s" % ("%s%s%s" % ("rsn-",
+                             network,
+                             "_") if network is not None else ""),
+         "%s" % ("%s%s%s" % ("roi-",
+                             op.basename(roi).split(".")[0],
+                             "_") if roi is not None else ""),
+         "model-",
+         conn_model,
+         "_",
+         "%s" % ("%s%s%s" % ("nodetype-spheres-",
+                             node_size,
+                             "mm_") if (
+             (node_size != "parc") and (
+                 node_size is not None)) else "nodetype-parc_"),
+         "%s" % ("%s%s%s" % ("smooth-",
+                             smooth,
+                             "fwhm_") if float(smooth) > 0 else ""),
+         "%s" % ("%s%s%s" % ("hpass-",
+                             hpass,
+                             "Hz_") if hpass is not None else ""),
+         "%s" % ("%s%s%s" % ("extract-",
+                             extract_strategy,
+                             "") if extract_strategy is not None else ""),
+         "_thr-",
+         thr,
+         ".png",
+         )
 
-    with open(
-        pkg_resources.resource_filename("pynets", "runconfig.yaml"), "r"
-    ) as stream:
-        hardcoded_params = yaml.load(stream)
-        try:
-            cmap_name = hardcoded_params["plotting"]["functional"][
-                "adjacency"]["color_theme"][0]
-        except KeyError:
-            print(
-                "ERROR: Plotting configuration not successfully extracted from"
-                " runconfig.yaml"
-            )
-            sys.exit(0)
-    stream.close()
+    hardcoded_params = load_runconfig()
+    try:
+        cmap_name = hardcoded_params["plotting"]["functional"][
+            "adjacency"]["color_theme"][0]
+    except KeyError as e:
+        print(e,
+              "Plotting configuration not successfully extracted from"
+              " runconfig.yaml"
+              )
 
     plot_graphs.plot_conn_mat(
         conn_matrix, labels, out_path_fig, cmap=plt.get_cmap(cmap_name)
@@ -328,37 +307,39 @@ def plot_conn_mat_func(
         G = nx.from_numpy_matrix(np.abs(conn_matrix))
         _, node_comm_aff_mat, resolution, num_comms = \
             community_resolution_selection(G)
-        out_path_fig_comm = "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s" % (dir_path,
-                                                                  "/adjacency-communities_",
-                                                                  ID,
-                                                                  "_modality-func_",
-                                                                  "%s" % ("%s%s%s" % ("rsn-",
-                                                                                      network,
-                                                                                      "_") if network is not None else ""),
-                                                                  "%s" % ("%s%s%s" % ("roi-",
-                                                                                      op.basename(roi).split(".")[0],
-                                                                                      "_") if roi is not None else ""),
-                                                                  "model-",
-                                                                  conn_model,
-                                                                  "_",
-                                                                  "%s" % ("%s%s%s" % ("nodetype-spheres-",
-                                                                                      node_size,
-                                                                                      "mm_") if (
-                                                                      (node_size != "parc") and (
-                                                                          node_size is not None)) else "nodetype-parc_"),
-                                                                  "%s" % ("%s%s%s" % ("smooth-",
-                                                                                      smooth,
-                                                                                      "fwhm_") if float(smooth) > 0 else ""),
-                                                                  "%s" % ("%s%s%s" % ("hpass-",
-                                                                                      hpass,
-                                                                                      "Hz_") if hpass is not None else ""),
-                                                                  "%s" % ("%s%s%s" % ("extract-",
-                                                                                      extract_strategy,
-                                                                                      "") if extract_strategy is not None else ""),
-                                                                  "_thr-",
-                                                                  thr,
-                                                                  ".png",
-                                                                  )
+        out_path_fig_comm = \
+            "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s" % \
+            (dir_path,
+             "/adjacency-communities_",
+             ID,
+             "_modality-func_",
+             "%s" % ("%s%s%s" % ("rsn-",
+                                 network,
+                                 "_") if network is not None else ""),
+             "%s" % ("%s%s%s" % ("roi-",
+                                 op.basename(roi).split(".")[0],
+                                 "_") if roi is not None else ""),
+             "model-",
+             conn_model,
+             "_",
+             "%s" % ("%s%s%s" % ("nodetype-spheres-",
+                                 node_size,
+                                 "mm_") if (
+                 (node_size != "parc") and (
+                     node_size is not None)) else "nodetype-parc_"),
+             "%s" % ("%s%s%s" % ("smooth-",
+                                 smooth,
+                                 "fwhm_") if float(smooth) > 0 else ""),
+             "%s" % ("%s%s%s" % ("hpass-",
+                                 hpass,
+                                 "Hz_") if hpass is not None else ""),
+             "%s" % ("%s%s%s" % ("extract-",
+                                 extract_strategy,
+                                 "") if extract_strategy is not None else ""),
+             "_thr-",
+             thr,
+             ".png",
+             )
         plot_graphs.plot_community_conn_mat(
             conn_matrix,
             labels,
@@ -435,61 +416,58 @@ def plot_conn_mat_struct(
         Minimum fiber length threshold in mm to restrict tracking.
     """
     import matplotlib.pyplot as plt
-    import pkg_resources
-    import yaml
+    from pynets.core.utils import load_runconfig
     import sys
     from pynets.plotting import plot_graphs
     import networkx as nx
     import os.path as op
 
-    out_path_fig = "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s" % (dir_path,
-                                                                 "/adjacency_",
-                                                                 ID,
-                                                                 "_modality-dwi_",
-                                                                 "%s" % ("%s%s%s" % ("rsn-",
-                                                                                     network,
-                                                                                     "_") if network is not None else ""),
-                                                                 "%s" % ("%s%s%s" % ("roi-",
-                                                                                     op.basename(roi).split(".")[0],
-                                                                                     "_") if roi is not None else ""),
-                                                                 "model-",
-                                                                 conn_model,
-                                                                 "_",
-                                                                 "%s" % ("%s%s%s" % ("nodetype-spheres-",
-                                                                                     node_size,
-                                                                                     "mm_") if (
-                                                                     (node_size != "parc") and (
-                                                                         node_size is not None)) else "nodetype-parc_"),
-                                                                 "%s" % ("%s%s%s" % ("samples-",
-                                                                                     int(target_samples),
-                                                                                     "streams_") if float(target_samples) > 0 else "_"),
-                                                                 "tracktype-",
-                                                                 track_type,
-                                                                 "_directget-",
-                                                                 directget,
-                                                                 "_minlength-",
-                                                                 min_length,
-                                                                 "_tol-",
-                                                                 error_margin,
-                                                                 "_thr-",
-                                                                 thr,
-                                                                 ".png",
-                                                                 )
+    out_path_fig = \
+        "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s" % \
+        (dir_path,
+         "/adjacency_",
+         ID,
+         "_modality-dwi_",
+         "%s" % ("%s%s%s" % ("rsn-",
+                             network,
+                             "_") if network is not None else ""),
+         "%s" % ("%s%s%s" % ("roi-",
+                             op.basename(roi).split(".")[0],
+                             "_") if roi is not None else ""),
+         "model-",
+         conn_model,
+         "_",
+         "%s" % ("%s%s%s" % ("nodetype-spheres-",
+                             node_size,
+                             "mm_") if (
+             (node_size != "parc") and (
+                 node_size is not None)) else "nodetype-parc_"),
+         "%s" % ("%s%s%s" % ("samples-",
+                             int(target_samples),
+                             "streams_") if float(target_samples) > 0
+                 else "_"),
+         "tracktype-",
+         track_type,
+         "_directget-",
+         directget,
+         "_minlength-",
+         min_length,
+         "_tol-",
+         error_margin,
+         "_thr-",
+         thr,
+         ".png",
+         )
 
-    with open(
-        pkg_resources.resource_filename("pynets", "runconfig.yaml"), "r"
-    ) as stream:
-        hardcoded_params = yaml.load(stream)
-        try:
-            cmap_name = hardcoded_params["plotting"]["structural"][
-                "adjacency"]["color_theme"][0]
-        except KeyError:
-            print(
-                "ERROR: Plotting configuration not successfully extracted from"
-                " runconfig.yaml"
-            )
-            sys.exit(0)
-    stream.close()
+    hardcoded_params = load_runconfig()
+    try:
+        cmap_name = hardcoded_params["plotting"]["structural"][
+            "adjacency"]["color_theme"][0]
+    except KeyError as e:
+        print(e,
+              "Plotting configuration not successfully extracted from"
+              " runconfig.yaml"
+              )
 
     plot_graphs.plot_conn_mat(
         conn_matrix, labels, out_path_fig, cmap=plt.get_cmap(cmap_name)
@@ -502,39 +480,42 @@ def plot_conn_mat_struct(
         G = nx.from_numpy_matrix(np.abs(conn_matrix))
         _, node_comm_aff_mat, resolution, num_comms = \
             community_resolution_selection(G)
-        out_path_fig_comm = "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s" % (dir_path,
-                                                                          "/adjacency-communities_",
-                                                                          ID,
-                                                                          "_modality-dwi_",
-                                                                          "%s" % ("%s%s%s" % ("rsn-",
-                                                                                              network,
-                                                                                              "_") if network is not None else ""),
-                                                                          "%s" % ("%s%s%s" % ("roi-",
-                                                                                              op.basename(roi).split(".")[0],
-                                                                                              "_") if roi is not None else ""),
-                                                                          "model-",
-                                                                          conn_model,
-                                                                          "_",
-                                                                          "%s" % ("%s%s%s" % ("nodetype-spheres-",
-                                                                                              node_size,
-                                                                                              "mm_") if (
-                                                                              (node_size != "parc") and (
-                                                                                  node_size is not None)) else "nodetype-parc_"),
-                                                                          "%s" % ("%s%s%s" % ("samples-",
-                                                                                              int(target_samples),
-                                                                                              "streams_") if float(target_samples) > 0 else "_"),
-                                                                          "tracktype-",
-                                                                          track_type,
-                                                                          "_directget-",
-                                                                          directget,
-                                                                          "_minlength-",
-                                                                          min_length,
-                                                                          "_tol-",
-                                                                          error_margin,
-                                                                          "_thr-",
-                                                                          thr,
-                                                                          ".png",
-                                                                          )
+        out_path_fig_comm = \
+            "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s" \
+            % (dir_path,
+               "/adjacency-communities_",
+               ID,
+               "_modality-dwi_",
+               "%s" % ("%s%s%s" % ("rsn-",
+                                   network,
+                                   "_") if network is not None else ""),
+               "%s" % ("%s%s%s" % ("roi-",
+                                   op.basename(roi).split(".")[0],
+                                   "_") if roi is not None else ""),
+               "model-",
+               conn_model,
+               "_",
+               "%s" % ("%s%s%s" % ("nodetype-spheres-",
+                                   node_size,
+                                   "mm_") if (
+                   (node_size != "parc") and (
+                       node_size is not None)) else "nodetype-parc_"),
+               "%s" % ("%s%s%s" % ("samples-",
+                                   int(target_samples),
+                                   "streams_") if float(target_samples) > 0
+                       else "_"),
+               "tracktype-",
+               track_type,
+               "_directget-",
+               directget,
+               "_minlength-",
+               min_length,
+               "_tol-",
+               error_margin,
+               "_thr-",
+               thr,
+               ".png",
+               )
         plot_graphs.plot_community_conn_mat(
             conn_matrix,
             labels,
