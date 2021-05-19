@@ -59,25 +59,39 @@ def plotting_data():
 
     yield {'conn_matrix': conn_matrix, 'labels': labels, 'coords': coords}
 
-# data-related functions
-def _generate_data():
-    test_data_dir = str(Path(__file__).parent/"randomized_examples/")
-    if os.path.isdir(test_data_dir) is False:
-        os.makedirs(test_data_dir, exist_ok=True)
-    test_data = [np.asarray([[np.float64(randint(0, 64)) for _ in range(94)] for _ in range(94)]) for _ in range(12)]
-    test_data = [np.nan_to_num(np.maximum(array, array.T)) for array in test_data]
-    for array in range(1, len(test_data) + 1): 
-        np.save(test_data_dir + "Randomized_data_" + str(array), test_data[array - 1])
-    input_paths = [test_data_dir + "Randomized_data_" +  str(array) + ".npy" for array in range(1, len(test_data) + 1)]
 
-    return input_paths
+@pytest.fixture(scope='module')
+def gen_mat_data():
+    mat_dict = {}
+    mat_dict['real'] = {}
+    mat_dict['random'] = {}
+    mat_dict['real']['is_file'] = {}
+    mat_dict['random']['is_file'] = {}    
+    mat_dict['real']['is_obj'] = {}
+    mat_dict['random']['is_obj'] = {}
 
+    mat_dict['real']['is_file']['exists'] = {}
+    mat_dict['random']['is_file']['noexists'] = {}    
+    mat_dict['real']['is_obj']['exists'] = {}
+    mat_dict['random']['is_obj'] = {} 
+    mat_dict['real']['is_file'] = {}
+    mat_dict['random']['is_file'] = {}    
+    mat_dict['real']['is_obj'] = {}
+    mat_dict['random']['is_obj'] = {} 
 
-@pytest.fixture(scope='function') #Returns list for mutability
-def random_data():
-    return _generate_data()
+    random_mats = [tuple([mat] * 2 + [True]) for mat in  [np.nan_to_num(np.maximum(array, array.T)) for array in [np.asarray([[np.float64(randint(0, 64)) for _ in range(94)] for _ in range(94)]) for _ in range(12)]]]
+    real_mats_files = [tuple([mat] * 2 + [True]) for mat in glob(str(Path(__file__).parent/"examples/miscellaneous/sub-0021001*thrtype-PROP*.npy"))]
+    real_mats_files = [tuple(file_path_1, 'exists'), tuple(file_path_2, 'noexist') ]
+    yield mat_dict
 
-def pytest_configure(): #Sets constants as tuples for immutability as safeguard against unintended changes
-    pytest.constant_random_data = tuple(_generate_data())
+""" def pytest_configure(): #Sets constants as tuples for immutability as safeguard against unintended changes
+    generated_data_dir = str(Path(__file__).parent/"randomized_examples/")
+    if os.path.isdir(generated_data_dir) is False:
+        os.makedirs(generated_data_dir, exist_ok=True)
+    generated_data = _generate_data()
+    for array in range(1, len(generated_data) + 1): 
+        np.save(generated_data_dir + "Randomized_data_" + str(array), generated_data[array - 1])
+    pytest.constant_random_data = tuple([generated_data_dir + "Randomized_data_" +  str(array) + ".npy" for array in range(1, len(generated_data) + 1)])
     pytest.sub0021001_files = tuple(glob(str(Path(__file__).parent/"examples/miscellaneous/sub-0021001*thrtype-PROP*.npy"))) #All (94, 94) in shape
 
+ """

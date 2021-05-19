@@ -8,6 +8,7 @@ import logging
 from glob import glob
 from pynets.stats import embeddings
 import os
+import tempfile
 from random import randint
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,9 @@ to_nparrays = lambda data: [np.load(npfile) for npfile in data]
 to_nxgraphs = lambda data: [nx.from_numpy_matrix(nparray) for nparray in to_nparrays(data)]
 to_large_nparray = lambda data: np.stack(to_nparrays(data))
 
+def iter_mat_check():
+    import itertools
+    return itertools.combinations([False, True, mark.xfail(False)], 3)
 
 #pytest.constant_random_data and pytest.sub0021001_files initialized in conftest.py at runtime
 #pylint: disable=no-member
@@ -71,6 +75,59 @@ def test_mase(graph_path_list, graph_path, data_type, ID="0021001", atlas="Defau
         all([graph.shape == (94, 94) for graph in pop_array]):
         assert output_shape[0] == 12
         assert output_shape[1] == output_shape[2]
+
+
+#pylint: disable=no-member
+
+@pytest.mark.parametrize("random", 
+    [True, False], 
+    "is_file", [True, False]
+    "file_exists", [True, pytest.mark.xfail(False)],
+    ]) 
+@pytest.mark.parametrize("mat_type", ['np', 'nx'])
+@pytest.mark.parametrize('random,is_file,file_exists', iter_mat_check())
+def test_ase(random_gen_data, random, is_file, file_exists, mat_type, ID="0021001", subgraph_name="all_nodes", \
+n_components=None, prune=0, norm=1, atlas="Default"):
+
+    def check_embedding_exists(mat, atlas, ID):
+        if isinstance(mat, np.ndarray):
+            graph_path = tempfile.NamedTemporaryFile(mode='w+', suffix='.npy')
+            np.save(mat, graph_path)
+        elif isinstance(mat, str) and os.path.isfile(mat):
+            graph_path = mat
+            mat = np.load(mat)
+        else:
+            raise FileNotFoundError("Data type for mat not understood")
+        
+        atlas 
+        output_file = embeddings._ase_embed(mat, atlas, graph_path, ID)
+        assert Path(output_file).is_file() and output_file.endswith(".npy")
+
+    if mat_type == 'np':
+        mat_type = to_nparrays
+    elif mat_type == 'nx':
+        mat_type == to_nxgraphs
+
+
+    if random is True:
+        if is_file is True:
+            if exists is False:
+                mat = mat_dict['random']['is_file']['noexists']
+        
+    else:
+
+
+    check_embedding_exists(mat, atlas, ID)
+
+    print(output_file)
+
+    output_shape = np.load(output_file).shape
+
+    if isinstance(mat, nx.Graph) and nx.to_numpy_matrix(mat).shape == (94, 94):
+        assert output_shape[0] == 94
+
+    if isinstance(mat, np.ndarray) and mat.shape == (94, 94):
+        assert output_shape[0] == 94
 
 
 #pylint: disable=no-member
